@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  db:
+    image: timescale/timescaledb:latest-pg16
+    environment:
+      POSTGRES_USER: runcoach
+      POSTGRES_PASSWORD: runcoach
+      POSTGRES_DB: runcoach
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U runcoach"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://runcoach:runcoach@db:5432/runcoach
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src  # for local dev hot-reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pgdata:
