@@ -143,7 +143,7 @@ async def trigger_weekly_plan(bg: BackgroundTasks) -> dict:
 
 @router.get("/admin/strava-auth-url")
 async def strava_auth_url() -> dict:
-    redirect_uri = f"{settings.webhook_url.rstrip('/webhook/telegram')}/auth/strava/callback"
+    redirect_uri = f"{settings.webhook_url.rstrip('/')}/auth/strava/callback"
     url = (
         f"https://www.strava.com/oauth/authorize"
         f"?client_id={settings.strava_client_id}"

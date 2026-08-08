@@ -172,6 +172,12 @@ async def job_daily_sync() -> None:
         # 2. Recompute today's metrics
         await persist_daily_metrics(db)
 
+        # Commit the data sync now, independent of steps below. Steps 3-5 call
+        # out to Claude/Telegram, which can fail (rate limits, billing, network) —
+        # that must never roll back activities/metrics that already synced cleanly.
+        await db.commit()
+        log.info("Data sync committed (activities + daily metrics)")
+
         # 3. Assess injury risk
         assessment = await assess_risk(db)
         log.info(f"Risk assessment: {assessment.overall_severity}, {len(assessment.flags)} flags")
