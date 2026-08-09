@@ -374,6 +374,45 @@ async def compute_weekly_volume_spike(
 
 
 # ---------------------------------------------------------------------------
+# Calendar week mileage (Mon-Sun, matching how Strava reports weekly totals)
+# ---------------------------------------------------------------------------
+# Deliberately separate from compute_workload's rolling 7-day acute window and
+# compute_weekly_volume_spike's rolling window — those stay rolling-window
+# because that's the sports-science standard for ACWR/volume-spike injury-risk
+# math, and changing that windowing would change alert sensitivity. This is
+# purely a display/comparison stat so Daniel's numbers match what he sees on
+# Strava.
+
+class CalendarWeekMileage(NamedTuple):
+    week_start: date        # Monday
+    this_week_miles: float
+    last_week_start: date
+    last_week_miles: float
+
+
+async def compute_calendar_week_mileage(
+    db: AsyncSession, today: date | None = None
+) -> CalendarWeekMileage:
+    if today is None:
+        today = date.today()
+
+    this_monday = today - timedelta(days=today.weekday())
+    last_monday = this_monday - timedelta(days=7)
+
+    daily = await _mileage_by_day(db, last_monday, today)
+
+    this_week = sum(daily.get(this_monday + timedelta(i), 0.0) for i in range((today - this_monday).days + 1))
+    last_week = sum(daily.get(last_monday + timedelta(i), 0.0) for i in range(7))
+
+    return CalendarWeekMileage(
+        week_start=this_monday,
+        this_week_miles=round(this_week, 2),
+        last_week_start=last_monday,
+        last_week_miles=round(last_week, 2),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Recent paces (for finish time prediction and race-pace trigger)
 # ---------------------------------------------------------------------------
 

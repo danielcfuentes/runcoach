@@ -103,12 +103,13 @@ async def strava_oauth_callback(code: str, request: Request) -> dict:
 async def status() -> dict:
     from datetime import date
     from src.data.database import async_session_factory
-    from src.metrics.calculator import compute_workload
+    from src.metrics.calculator import compute_calendar_week_mileage, compute_workload
     from src.metrics.injury_risk import assess_risk
     from src.coach.prompts import weeks_to_race, training_phase
 
     async with async_session_factory() as db:
         snap = await compute_workload(db)
+        cal_week = await compute_calendar_week_mileage(db)
         assessment = await assess_risk(db)
         wtr = weeks_to_race()
         phase = training_phase(wtr)
@@ -120,8 +121,10 @@ async def status() -> dict:
         "tsb": snap.tsb,
         "atl": snap.atl,
         "ctl": snap.ctl,
-        "weekly_miles": snap.acute_miles,
+        "weekly_miles": snap.acute_miles,  # rolling 7-day, used for ACWR
         "four_week_miles": snap.chronic_miles,
+        "calendar_week_miles": cal_week.this_week_miles,  # Mon-Sun, matches Strava
+        "calendar_week_last_miles": cal_week.last_week_miles,
         "risk_severity": assessment.overall_severity,
         "active_flags": [f.name for f in assessment.flags],
     }

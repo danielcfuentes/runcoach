@@ -105,6 +105,7 @@ async def sync_activities(db: AsyncSession, days_back: int = 7) -> list[dict]:
             average_hr=raw.get("average_heartrate"),
             max_hr=raw.get("max_heartrate"),
             average_cadence=raw.get("average_cadence"),
+            average_watts=raw.get("average_watts") if raw.get("device_watts") else None,
             suffer_score=raw.get("suffer_score"),
             raw_data=raw,
         )

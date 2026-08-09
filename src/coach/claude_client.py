@@ -59,13 +59,16 @@ def generate_daily_checkin(context: str, activity_summary: str) -> str:
     prompt = (
         f"{context}\n\n"
         f"TODAY'S ACTIVITY:\n{activity_summary}\n\n"
-        "Write a brief post-run check-in (3-5 sentences max). Cover:\n"
-        "- Whether today's run looked on target\n"
-        "- Any notable metrics (HR, pace vs. expected, cadence if relevant)\n"
+        "Write a brief post-run check-in (3-6 sentences max). If the summary lists more "
+        "than one run, treat them as one day's training — cover the day as a whole (lead "
+        "with the combined total) rather than writing a separate paragraph per run.\n"
+        "Cover:\n"
+        "- Whether today's total volume/effort looked on target\n"
+        "- Any notable metrics (HR, pace vs. expected, cadence, power/watts if listed)\n"
         "- One forward-looking note if relevant\n\n"
         "Keep it concise — this is a daily text, not a full analysis."
     )
-    return _call([{"role": "user", "content": prompt}], max_tokens=300)
+    return _call([{"role": "user", "content": prompt}], max_tokens=350)
 
 
 def generate_recalibration_update(

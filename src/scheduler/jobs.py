@@ -18,7 +18,9 @@ from src.data.database import async_session_factory
 from src.data.garmin import sync_daily_metrics
 from src.data.strava import sync_activities
 from src.metrics.calculator import (
+    METERS_PER_MILE,
     check_race_pace_trigger,
+    compute_calendar_week_mileage,
     compute_recent_paces,
     compute_rhr_status,
     compute_workload,
@@ -90,6 +92,7 @@ async def _compute_finish_prediction(db) -> tuple[str | None, int | None]:
 
 async def _build_context(db, assessment: RiskAssessment | None = None) -> tuple[str, dict]:
     snap = await compute_workload(db)
+    cal_week = await compute_calendar_week_mileage(db)
     rhr = await compute_rhr_status(db)
     wtr = weeks_to_race()
     phase = training_phase(wtr)
@@ -113,6 +116,8 @@ async def _build_context(db, assessment: RiskAssessment | None = None) -> tuple[
         ctl=snap.ctl,
         weekly_miles=snap.acute_miles,
         four_week_avg=snap.chronic_miles,
+        calendar_week_miles=cal_week.this_week_miles,
+        calendar_week_last_miles=cal_week.last_week_miles,
         rhr_baseline=rhr.baseline_bpm if rhr else None,
         recent_rhr=rhr.recent_avg_bpm if rhr else None,
         flags_summary=flags_summary,
@@ -127,6 +132,50 @@ async def _build_context(db, assessment: RiskAssessment | None = None) -> tuple[
         "predicted_finish": predicted_finish,
         "predicted_delta": predicted_delta,
     }
+
+
+def _build_activity_summary(activities: list[dict]) -> str:
+    """Combine every Strava activity from one sync into a single check-in summary.
+
+    A sync can catch more than one run in a day (e.g. an AM shakeout + a PM
+    workout) — this reports all of them, with a combined total up top when
+    there's more than one, so nothing gets silently dropped from the message.
+    """
+    def _mi(raw: dict) -> float:
+        return (raw.get("distance") or 0) / METERS_PER_MILE
+
+    def _pace_str(dist_mi: float, moving_s: float) -> str:
+        if dist_mi <= 0:
+            return "N/A"
+        pace_sec = moving_s / dist_mi
+        return f"{int(pace_sec // 60)}:{int(pace_sec % 60):02d}/mi"
+
+    lines: list[str] = []
+
+    if len(activities) > 1:
+        total_dist_mi = sum(_mi(a) for a in activities)
+        total_moving_s = sum(a.get("moving_time") or 0 for a in activities)
+        lines.append(
+            f"COMBINED (day total): {len(activities)} runs, {total_dist_mi:.2f}mi, "
+            f"{_pace_str(total_dist_mi, total_moving_s)} blended pace, "
+            f"{total_moving_s // 60:.0f}min total moving time"
+        )
+        lines.append("")
+        lines.append("Individual runs:")
+
+    for a in activities:
+        dist_mi = _mi(a)
+        moving_s = a.get("moving_time") or 0
+        detail = [f"{dist_mi:.2f}mi", _pace_str(dist_mi, moving_s)]
+        if a.get("average_heartrate"):
+            detail.append(f"{a['average_heartrate']:.0f} bpm avg")
+        if a.get("average_cadence"):
+            detail.append(f"{a['average_cadence']:.0f} spm")
+        if a.get("device_watts") and a.get("average_watts"):
+            detail.append(f"{a['average_watts']:.0f}W avg")
+        lines.append(f"- {a.get('name', 'Run')}: {', '.join(detail)}")
+
+    return "\n".join(lines)
 
 
 async def _save_coach_message(db, content: str, message_type: str, tg_response: dict | None = None) -> None:
@@ -195,23 +244,11 @@ async def job_daily_sync() -> None:
             await _save_coach_message(db, formatted, "alert", tg_resp)
             log.warning(f"Sent injury alert: {assessment.overall_severity}")
 
-        # 5. Daily check-in if new activities
+        # 5. Daily check-in if new activities — one combined message covering every
+        # activity synced this run (a sync can catch more than one run in a day;
+        # reporting only the last one silently drops the others).
         if new_strava:
-            latest = new_strava[-1]
-            dist_km = (latest.get("distance") or 0) / 1000
-            pace_sec = latest.get("moving_time", 0) / dist_km if dist_km > 0 else 0
-            pace_min, pace_s = int(pace_sec // 60), int(pace_sec % 60)
-            cadence = latest.get("average_cadence")
-            cadence_str = f"{cadence:.0f} spm" if cadence else "N/A"
-
-            activity_summary = (
-                f"Name: {latest.get('name', 'Run')}\n"
-                f"Distance: {dist_km:.2f}km\n"
-                f"Pace: {pace_min}:{pace_s:02d}/km\n"
-                f"HR: {latest.get('average_heartrate', 'N/A')} bpm avg\n"
-                f"Cadence: {cadence_str}\n"
-                f"Moving time: {latest.get('moving_time', 0) // 60}min\n"
-            )
+            activity_summary = _build_activity_summary(new_strava)
             ctx, _ = await _build_context(db)
             checkin = generate_daily_checkin(ctx, activity_summary)
             tg_resp = await send_message(checkin)

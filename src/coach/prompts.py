@@ -48,18 +48,6 @@ RESPONSE STYLE
 - Always back recommendations with the underlying data.
 - For weekly plans, use a clear day-by-day format.
 - Keep responses focused — Daniel is a data-oriented athlete who wants the numbers.
-- Daniel wants to understand the metrics as he reads, not look them up separately.
-  Every message must be self-contained: any technical term or acronym you use
-  (ACWR, TSB, ATL, CTL, RHR, HRV, volume spike, pace decoupling, cadence, etc.)
-  needs a short plain-English gloss somewhere in that same message. One gloss per
-  term, first use only — don't define the same term twice.
-  - In prose, gloss it inline in parentheses: "ACWR (this week's load vs. your
-    recent average) is 0.35".
-  - In a table or any abbreviated format where inline parentheticals don't fit,
-    add a one-line "Legend:" underneath spelling out every acronym used in that
-    table, e.g. "Legend: ACWR = load ratio (this week vs. recent avg) · TSB =
-    fatigue/freshness balance · RHR = resting heart rate".
-  Never ship a table full of unexplained acronyms with no legend.
 """
 
 
@@ -72,6 +60,8 @@ def build_context_block(
     ctl: float,
     weekly_miles: float,
     four_week_avg: float,
+    calendar_week_miles: float,
+    calendar_week_last_miles: float,
     rhr_baseline: float | None,
     recent_rhr: float | None,
     flags_summary: str,
@@ -89,8 +79,10 @@ def build_context_block(
         "CURRENT METRICS:",
         f"  ACWR: {acwr:.2f}",
         f"  TSB: {tsb:.1f}  (ATL: {atl:.1f}, CTL: {ctl:.1f})",
-        f"  7-day mileage: {weekly_miles:.1f}mi",
+        f"  7-day rolling mileage: {weekly_miles:.1f}mi (used for ACWR/injury-risk math below)",
         f"  4-week avg weekly mileage: {four_week_avg / 4:.1f}mi",
+        f"  This calendar week (Mon-Sun, matches Strava): {calendar_week_miles:.1f}mi so far",
+        f"  Last calendar week (Mon-Sun): {calendar_week_last_miles:.1f}mi",
     ]
 
     if rhr_baseline is not None:

@@ -29,6 +29,7 @@ class Activity(Base):
     average_hr = Column(Float)
     max_hr = Column(Float)
     average_cadence = Column(Float)
+    average_watts = Column(Float)  # running power, when a power meter is present
     suffer_score = Column(Integer)
     training_load = Column(Float)
     perceived_effort = Column(Integer)  # 1-10, user-supplied
